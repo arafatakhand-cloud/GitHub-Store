@@ -2,51 +2,99 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { sendPasswordResetEmail } from "firebase/auth";
-import { auth } from "../../lib/firebase";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "../../lib/firebase";
+
+const inputClass =
+  "w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3.5 text-sm text-white outline-none placeholder:text-white/25 transition focus:border-cyan-300/50 focus:bg-black/30 focus:ring-2 focus:ring-cyan-300/10 disabled:opacity-60";
+
+const labelClass = "mb-2 block text-sm font-semibold text-white/80";
+
+const requestPasswordResetEmailCode = httpsCallable<
+  { username: string },
+  { sent: boolean; emailHint?: string }
+>(functions, "requestPasswordResetEmailCode");
+
+const resetPasswordWithEmailCode = httpsCallable(functions, "resetPasswordWithEmailCode");
 
 export default function ForgotPasswordPage() {
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
+  const [code, setCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [step, setStep] = useState<"request" | "reset" | "done">("request");
+  const [info, setInfo] = useState("");
   const [error, setError] = useState("");
-  const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleReset = async () => {
+  const handleRequest = async () => {
     setError("");
-    setSent(false);
+    setInfo("");
 
-    const cleanEmail = email.trim().toLowerCase();
+    const cleanId = username.trim();
 
-    if (!cleanEmail) {
-      setError("Please enter your email address.");
-      return;
-    }
-
-    // MIG ID accounts sign in with an internal address that can't receive mail.
-    if (!cleanEmail.includes("@") || cleanEmail.endsWith("@login.migwith.local")) {
-      setError(
-        "Password reset works only for accounts with a real email address. For a MIG ID account, please contact MIGwith support."
-      );
+    if (!cleanId) {
+      setError("Please enter your MIG ID.");
       return;
     }
 
     try {
       setLoading(true);
 
-      await sendPasswordResetEmail(auth, cleanEmail);
+      const { data } = await requestPasswordResetEmailCode({ username: cleanId });
 
-      setSent(true);
+      if (!data?.sent) {
+        setError(
+          "We couldn't send a code. Check your MIG ID, or add a recovery email in the app's Settings first."
+        );
+        return;
+      }
+
+      setStep("reset");
+      setInfo(
+        `A reset code was sent to ${data.emailHint || "your recovery email"}. It expires in 10 minutes.`
+      );
     } catch (err: any) {
       console.error(err);
+      setError(err?.message || "Could not send the reset code.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      if (err?.code === "auth/invalid-email") {
-        setError("Please enter a valid email address.");
-      } else if (err?.code === "auth/user-not-found") {
-        // Don't reveal whether an account exists.
-        setSent(true);
-      } else {
-        setError(err?.message || "Could not send reset email.");
-      }
+  const handleReset = async () => {
+    setError("");
+
+    if (!code.trim()) {
+      setError("Please enter the code from your email.");
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setError("New password must be at least 6 characters.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      await resetPasswordWithEmailCode({
+        username: username.trim(),
+        code: code.trim(),
+        newPassword,
+      });
+
+      setStep("done");
+      setInfo("Your password has been changed. You can now log in.");
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || "Could not reset the password.");
     } finally {
       setLoading(false);
     }
@@ -104,34 +152,109 @@ export default function ForgotPasswordPage() {
             </h2>
 
             <p className="mt-3 text-sm text-white/45">
-              We&apos;ll send a reset link to your email
+              We&apos;ll email a reset code to your recovery email
             </p>
           </div>
 
           <div className="rounded-3xl border border-white/10 bg-white/[0.045] p-6 shadow-2xl shadow-black/30 backdrop-blur-2xl sm:p-8">
 
-            {/* Email */}
+            {/* MIG ID */}
             <div>
-              <label
-                htmlFor="email"
-                className="mb-2 block text-sm font-semibold text-white/80"
-              >
-                Email
+              <label htmlFor="username" className={labelClass}>
+                MIG ID
               </label>
 
               <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") handleReset();
+                  if (e.key === "Enter" && step === "request") handleRequest();
                 }}
-                placeholder="Enter your account email"
-                autoComplete="email"
-                className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3.5 text-sm text-white outline-none placeholder:text-white/25 transition focus:border-cyan-300/50 focus:bg-black/30 focus:ring-2 focus:ring-cyan-300/10"
+                placeholder="Enter your MIG ID"
+                autoComplete="username"
+                disabled={step !== "request"}
+                className={inputClass}
               />
             </div>
+
+            {step === "reset" && (
+              <>
+                {/* Code */}
+                <div className="mt-5">
+                  <label htmlFor="code" className={labelClass}>
+                    Reset Code
+                  </label>
+
+                  <input
+                    id="code"
+                    type="text"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    placeholder="Enter the code"
+                    autoComplete="one-time-code"
+                    className={`${inputClass} uppercase tracking-widest`}
+                  />
+                </div>
+
+                {/* New Password */}
+                <div className="mt-5">
+                  <label htmlFor="newPassword" className={labelClass}>
+                    New Password
+                  </label>
+
+                  <div className="relative">
+
+                    <input
+                      id="newPassword"
+                      type={showPassword ? "text" : "password"}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Create a new password"
+                      autoComplete="new-password"
+                      className={`${inputClass} pr-12`}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg px-2 py-1 text-lg text-white/40 transition hover:text-white"
+                    >
+                      {showPassword ? "🙈" : "👁️"}
+                    </button>
+
+                  </div>
+                </div>
+
+                {/* Confirm */}
+                <div className="mt-5">
+                  <label htmlFor="confirmPassword" className={labelClass}>
+                    Confirm New Password
+                  </label>
+
+                  <input
+                    id="confirmPassword"
+                    type={showPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleReset();
+                    }}
+                    placeholder="Re-enter the new password"
+                    autoComplete="new-password"
+                    className={inputClass}
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Info */}
+            {info && !error && (
+              <div className="mt-5 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+                {info}
+              </div>
+            )}
 
             {/* Error */}
             {error && (
@@ -140,29 +263,57 @@ export default function ForgotPasswordPage() {
               </div>
             )}
 
-            {/* Success */}
-            {sent && (
-              <div className="mt-5 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
-                If an account exists for this email, a reset link is on its way. Check your inbox.
-              </div>
+            {/* Action */}
+            {step === "request" && (
+              <button
+                type="button"
+                onClick={handleRequest}
+                disabled={loading}
+                className="mt-7 w-full rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-400 px-6 py-4 font-bold text-white shadow-xl shadow-blue-500/20 transition duration-300 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? "Sending..." : "Send Reset Code →"}
+              </button>
             )}
 
-            {/* Send */}
-            <button
-              type="button"
-              onClick={handleReset}
-              disabled={loading}
-              className="mt-7 w-full rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-400 px-6 py-4 font-bold text-white shadow-xl shadow-blue-500/20 transition duration-300 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? "Sending..." : "Send Reset Link →"}
-            </button>
+            {step === "reset" && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  disabled={loading}
+                  className="mt-7 w-full rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-400 px-6 py-4 font-bold text-white shadow-xl shadow-blue-500/20 transition duration-300 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loading ? "Saving..." : "Change Password →"}
+                </button>
 
-            <Link
-              href="/login"
-              className="mt-4 block w-full rounded-2xl border border-white/10 bg-white/5 px-6 py-4 text-center font-semibold text-white/80 transition hover:bg-white/10 hover:text-white"
-            >
-              Back to Login
-            </Link>
+                <button
+                  type="button"
+                  onClick={handleRequest}
+                  disabled={loading}
+                  className="mt-3 w-full text-center text-xs font-medium text-cyan-300 transition hover:text-cyan-200 disabled:opacity-50"
+                >
+                  Didn&apos;t get it? Send a new code
+                </button>
+              </>
+            )}
+
+            {step === "done" && (
+              <Link
+                href="/login"
+                className="mt-7 block w-full rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-400 px-6 py-4 text-center font-bold text-white shadow-xl shadow-blue-500/20 transition duration-300 hover:scale-[1.01]"
+              >
+                Login to MIGwith →
+              </Link>
+            )}
+
+            {step !== "done" && (
+              <Link
+                href="/login"
+                className="mt-4 block w-full rounded-2xl border border-white/10 bg-white/5 px-6 py-4 text-center font-semibold text-white/80 transition hover:bg-white/10 hover:text-white"
+              >
+                Back to Login
+              </Link>
+            )}
 
           </div>
 

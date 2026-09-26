@@ -3,37 +3,127 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
-import { auth, db } from "../../lib/firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { httpsCallable } from "firebase/functions";
+import { auth, functions } from "../../lib/firebase";
 
-const MIG_ID_PATTERN = /^[a-z0-9._]{3,20}$/;
+// Same rule createNormalUserId enforces on the server.
+const MIG_ID_PATTERN = /^(?=.*[A-Za-z])[A-Za-z0-9._-]{1,27}$/;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const GENDERS = ["Male", "Female"];
+
+const COUNTRIES = [
+  "Bangladesh",
+  "India",
+  "Pakistan",
+  "Nepal",
+  "Sri Lanka",
+  "Saudi Arabia",
+  "United Arab Emirates",
+  "Qatar",
+  "Kuwait",
+  "Oman",
+  "Bahrain",
+  "Malaysia",
+  "Singapore",
+  "United Kingdom",
+  "United States",
+  "Canada",
+  "Other",
+];
+
+const inputClass =
+  "w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3.5 text-sm text-white outline-none placeholder:text-white/25 transition focus:border-cyan-300/50 focus:bg-black/30 focus:ring-2 focus:ring-cyan-300/10 disabled:opacity-60";
+
+const labelClass = "mb-2 block text-sm font-semibold text-white/80";
+
+const sendEmailVerificationCode = httpsCallable(functions, "sendEmailVerificationCode");
+const verifyEmailVerificationCode = httpsCallable(functions, "verifyEmailVerificationCode");
+const createNormalUserId = httpsCallable(functions, "createNormalUserId");
 
 export default function RegisterPage() {
   const router = useRouter();
 
   const [migId, setMigId] = useState("");
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [codeSent, setCodeSent] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [gender, setGender] = useState("");
+  const [country, setCountry] = useState("Bangladesh");
+  const [referralCode, setReferralCode] = useState("");
   const [agree, setAgree] = useState(false);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [info, setInfo] = useState("");
+  const [loading, setLoading] = useState<"" | "send" | "verify" | "create">("");
 
-  const handleRegister = async () => {
+  const cleanEmail = email.trim().toLowerCase();
+
+  const handleSendCode = async () => {
     setError("");
+    setInfo("");
 
-    const cleanId = migId.trim().toLowerCase();
-
-    if (!cleanId || !password || !confirmPassword) {
-      setError("Please fill in all fields.");
+    if (!EMAIL_PATTERN.test(cleanEmail)) {
+      setError("Please enter a valid email address.");
       return;
     }
 
+    try {
+      setLoading("send");
+      await sendEmailVerificationCode({ email: cleanEmail, migId: migId.trim() });
+      setCodeSent(true);
+      setEmailVerified(false);
+      setCode("");
+      setInfo(`A verification code was sent to ${cleanEmail}.`);
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || "Could not send the verification code.");
+    } finally {
+      setLoading("");
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    setError("");
+    setInfo("");
+
+    if (!code.trim()) {
+      setError("Please enter the code from your email.");
+      return;
+    }
+
+    try {
+      setLoading("verify");
+      await verifyEmailVerificationCode({ email: cleanEmail, code: code.trim() });
+      setEmailVerified(true);
+      setInfo("Email verified.");
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || "Could not verify the code.");
+    } finally {
+      setLoading("");
+    }
+  };
+
+  const handleRegister = async () => {
+    setError("");
+    setInfo("");
+
+    const cleanId = migId.trim();
+
     if (!MIG_ID_PATTERN.test(cleanId)) {
       setError(
-        "MIG ID must be 3-20 characters: letters, numbers, dot or underscore."
+        "MIG ID must be 1-27 characters, at least 1 English letter, and only A-Z a-z 0-9 . _ -"
       );
+      return;
+    }
+
+    if (!emailVerified) {
+      setError("Please verify your email first.");
       return;
     }
 
@@ -47,44 +137,44 @@ export default function RegisterPage() {
       return;
     }
 
+    if (!gender || !country) {
+      setError("Please select your gender and country.");
+      return;
+    }
+
     if (!agree) {
       setError("Please accept the terms to continue.");
       return;
     }
 
     try {
-      setLoading(true);
+      setLoading("create");
 
-      const { user } = await createUserWithEmailAndPassword(
+      await createNormalUserId({
+        migId: cleanId,
+        email: cleanEmail,
+        password,
+        confirmPassword,
+        gender,
+        country,
+        referralCode: referralCode.trim(),
+        termsAccepted: agree,
+        verificationCode: code.trim(),
+      });
+
+      await signInWithEmailAndPassword(
         auth,
-        `${cleanId}@login.migwith.local`,
+        `${cleanId.toLowerCase()}@login.migwith.local`,
         password
       );
-
-      try {
-        await setDoc(doc(db, "users", user.uid), {
-          migId: cleanId,
-          createdAt: serverTimestamp(),
-        });
-      } catch (profileErr) {
-        // The account exists even if the profile write fails (e.g. Firestore rules).
-        console.error(profileErr);
-      }
 
       router.push("/");
       router.refresh();
     } catch (err: any) {
       console.error(err);
-
-      if (err?.code === "auth/email-already-in-use") {
-        setError("This MIG ID is already taken.");
-      } else if (err?.code === "auth/weak-password") {
-        setError("Password is too weak.");
-      } else {
-        setError(err?.message || "Registration failed.");
-      }
+      setError(err?.message || "Registration failed.");
     } finally {
-      setLoading(false);
+      setLoading("");
     }
   };
 
@@ -148,10 +238,7 @@ export default function RegisterPage() {
 
             {/* MIG ID */}
             <div>
-              <label
-                htmlFor="migId"
-                className="mb-2 block text-sm font-semibold text-white/80"
-              >
+              <label htmlFor="migId" className={labelClass}>
                 MIG ID
               </label>
 
@@ -160,25 +247,95 @@ export default function RegisterPage() {
                 type="text"
                 value={migId}
                 onChange={(e) => setMigId(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleRegister();
-                }}
                 placeholder="Choose your MIG ID"
                 autoComplete="username"
-                className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3.5 text-sm text-white outline-none placeholder:text-white/25 transition focus:border-cyan-300/50 focus:bg-black/30 focus:ring-2 focus:ring-cyan-300/10"
+                className={inputClass}
               />
 
               <p className="mt-2 text-xs text-white/30">
-                3-20 characters: letters, numbers, dot or underscore
+                1-27 characters, at least 1 letter. Only A-Z a-z 0-9 . _ -
               </p>
             </div>
 
+            {/* Email */}
+            <div className="mt-5">
+              <label htmlFor="email" className={labelClass}>
+                Recovery Email
+              </label>
+
+              <div className="flex gap-2">
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setCodeSent(false);
+                    setEmailVerified(false);
+                  }}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  disabled={emailVerified}
+                  className={inputClass}
+                />
+
+                <button
+                  type="button"
+                  onClick={handleSendCode}
+                  disabled={loading !== "" || emailVerified}
+                  className="shrink-0 rounded-2xl border border-cyan-300/30 bg-cyan-300/10 px-4 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {emailVerified
+                    ? "✓ Verified"
+                    : loading === "send"
+                      ? "Sending..."
+                      : codeSent
+                        ? "Resend"
+                        : "Send Code"}
+                </button>
+              </div>
+
+              <p className="mt-2 text-xs text-white/30">
+                Used to reset your password if you forget it
+              </p>
+            </div>
+
+            {/* Verification Code */}
+            {codeSent && !emailVerified && (
+              <div className="mt-5">
+                <label htmlFor="code" className={labelClass}>
+                  Verification Code
+                </label>
+
+                <div className="flex gap-2">
+                  <input
+                    id="code"
+                    type="text"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleVerifyCode();
+                    }}
+                    placeholder="Enter the code"
+                    autoComplete="one-time-code"
+                    className={`${inputClass} uppercase tracking-widest`}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={handleVerifyCode}
+                    disabled={loading !== ""}
+                    className="shrink-0 rounded-2xl border border-cyan-300/30 bg-cyan-300/10 px-4 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {loading === "verify" ? "Checking..." : "Verify"}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Password */}
             <div className="mt-5">
-              <label
-                htmlFor="password"
-                className="mb-2 block text-sm font-semibold text-white/80"
-              >
+              <label htmlFor="password" className={labelClass}>
                 Password
               </label>
 
@@ -189,12 +346,9 @@ export default function RegisterPage() {
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleRegister();
-                  }}
                   placeholder="Create a password"
                   autoComplete="new-password"
-                  className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3.5 pr-12 text-sm text-white outline-none placeholder:text-white/25 transition focus:border-cyan-300/50 focus:bg-black/30 focus:ring-2 focus:ring-cyan-300/10"
+                  className={`${inputClass} pr-12`}
                 />
 
                 <button
@@ -210,10 +364,7 @@ export default function RegisterPage() {
 
             {/* Confirm Password */}
             <div className="mt-5">
-              <label
-                htmlFor="confirmPassword"
-                className="mb-2 block text-sm font-semibold text-white/80"
-              >
+              <label htmlFor="confirmPassword" className={labelClass}>
                 Confirm Password
               </label>
 
@@ -222,14 +373,78 @@ export default function RegisterPage() {
                 type={showPassword ? "text" : "password"}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleRegister();
-                }}
                 placeholder="Re-enter your password"
                 autoComplete="new-password"
-                className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3.5 text-sm text-white outline-none placeholder:text-white/25 transition focus:border-cyan-300/50 focus:bg-black/30 focus:ring-2 focus:ring-cyan-300/10"
+                className={inputClass}
               />
             </div>
+
+            {/* Gender + Country */}
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="gender" className={labelClass}>
+                  Gender
+                </label>
+
+                <select
+                  id="gender"
+                  value={gender}
+                  onChange={(e) => setGender(e.target.value)}
+                  className={`${inputClass} appearance-none`}
+                >
+                  <option value="" className="bg-[#0b1430]">
+                    Select
+                  </option>
+                  {GENDERS.map((g) => (
+                    <option key={g} value={g} className="bg-[#0b1430]">
+                      {g}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="country" className={labelClass}>
+                  Country
+                </label>
+
+                <select
+                  id="country"
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                  className={`${inputClass} appearance-none`}
+                >
+                  {COUNTRIES.map((c) => (
+                    <option key={c} value={c} className="bg-[#0b1430]">
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Referral */}
+            <div className="mt-5">
+              <label htmlFor="referral" className={labelClass}>
+                Referral Code <span className="font-normal text-white/30">(optional)</span>
+              </label>
+
+              <input
+                id="referral"
+                type="text"
+                value={referralCode}
+                onChange={(e) => setReferralCode(e.target.value)}
+                placeholder="Enter referral code"
+                className={inputClass}
+              />
+            </div>
+
+            {/* Info */}
+            {info && !error && (
+              <div className="mt-5 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+                {info}
+              </div>
+            )}
 
             {/* Error */}
             {error && (
@@ -256,10 +471,10 @@ export default function RegisterPage() {
             <button
               type="button"
               onClick={handleRegister}
-              disabled={loading}
+              disabled={loading !== ""}
               className="mt-7 w-full rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-400 px-6 py-4 font-bold text-white shadow-xl shadow-blue-500/20 transition duration-300 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loading ? "Creating..." : "Create MIG ID →"}
+              {loading === "create" ? "Creating..." : "Create MIG ID →"}
             </button>
 
             <div className="my-7 flex items-center gap-4">
