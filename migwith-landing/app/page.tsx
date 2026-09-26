@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HeaderAuth, HeroActions } from "./_components/AuthControls";
 
 export default function Home() {
   return (
@@ -58,12 +59,7 @@ export default function Home() {
           </nav>
 
           {/* Login */}
-          <Link
-            href="/login"
-            className="rounded-xl border border-white/15 bg-white/5 px-5 py-2.5 text-sm font-semibold backdrop-blur transition hover:bg-white/10"
-          >
-            Login
-          </Link>
+          <HeaderAuth />
         </div>
       </header>
 
@@ -94,28 +90,7 @@ export default function Home() {
           </p>
 
           {/* Buttons */}
-          <div className="mt-10 flex w-full flex-col items-center justify-center gap-4 sm:flex-row">
-
-            {/* Create MIG ID */}
-            <Link
-              href="/register"
-              className="group flex w-full max-w-xs items-center justify-center rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-400 px-8 py-4 font-bold text-white shadow-xl shadow-blue-500/25 transition duration-300 hover:scale-[1.02] hover:shadow-cyan-400/20"
-            >
-              Create MIG ID
-
-              <span className="ml-2 transition group-hover:translate-x-1">
-                →
-              </span>
-            </Link>
-
-            {/* Login */}
-            <Link
-              href="/login"
-              className="flex w-full max-w-xs items-center justify-center rounded-2xl border border-white/15 bg-white/5 px-8 py-4 font-bold text-white/90 backdrop-blur transition hover:bg-white/10"
-            >
-              Login to MIGwith
-            </Link>
-          </div>
+          <HeroActions />
 
           {/* Feature Cards */}
           <div
