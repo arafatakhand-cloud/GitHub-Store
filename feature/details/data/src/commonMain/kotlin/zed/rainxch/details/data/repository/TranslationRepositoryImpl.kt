@@ -29,7 +29,9 @@ class TranslationRepositoryImpl(
         }
 
     private val cacheMutex = Mutex()
-    private val cache = LinkedHashMap<CacheKey, CachedTranslation>(MAX_CACHE_SIZE, 0.75f, true)
+    // Insertion-ordered; hits are re-inserted to keep LRU order (access-order
+    // LinkedHashMap is JVM-only).
+    private val cache = LinkedHashMap<CacheKey, CachedTranslation>()
     private val maxChunkSize = 4500
 
     @OptIn(ExperimentalTime::class)
@@ -41,9 +43,11 @@ class TranslationRepositoryImpl(
         val cacheKey = CacheKey(text, targetLanguage, sourceLanguage)
 
         cacheMutex.withLock {
-            cache[cacheKey]?.let { cached ->
-                if (!cached.isExpired()) return cached.result
-                cache.remove(cacheKey)
+            cache.remove(cacheKey)?.let { cached ->
+                if (!cached.isExpired()) {
+                    cache[cacheKey] = cached
+                    return cached.result
+                }
             }
         }
 
