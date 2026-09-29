@@ -1,0 +1,86 @@
+name: Build iOS & Check Android/Desktop
+
+on:
+  push:
+    branches:
+      - main
+      - 'claude/**'
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: '21'
+  JAVA_DISTRIBUTION: 'temurin'
+  GRADLE_OPTS: >-
+    -Dorg.gradle.daemon=false
+    -Dorg.gradle.vfs.watch=false
+
+jobs:
+  check-android-desktop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build Android debug APK and compile Desktop
+        run: ./gradlew --stacktrace :composeApp:assembleDebug :composeApp:compileKotlinJvm
+
+  build-ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Cache Kotlin/Native toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
+
+      - name: Build unsigned iOS app
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project iosApp/iosApp.xcodeproj \
+            -target iosApp \
+            -configuration Release \
+            -sdk iphoneos \
+            SYMROOT="$PWD/build/ios" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      # Unsigned: install with Sideloadly / AltStore / SideStore, which sign it with your Apple ID.
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          mkdir -p build/ipa/Payload
+          cp -R build/ios/Release-iphoneos/GitHubStore.app build/ipa/Payload/
+          cd build/ipa
+          zip -qr GitHubStore-unsigned.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GitHubStore-unsigned-ipa
+          path: build/ipa/GitHubStore-unsigned.ipa
