@@ -7,6 +7,7 @@ import platform.Foundation.NSURL
 import platform.UIKit.UIActivityViewController
 import platform.UIKit.UIApplication
 import platform.UIKit.UIViewController
+import platform.UIKit.popoverPresentationController
 
 internal fun topViewController(): UIViewController? {
     var controller = UIApplication.sharedApplication.keyWindow?.rootViewController

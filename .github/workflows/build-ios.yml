@@ -57,7 +57,65 @@ jobs:
           path: ~/.konan
           key: konan-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
 
-      - name: Build unsigned iOS app
+      - name: Build iOS app for the Simulator
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project iosApp/iosApp.xcodeproj \
+            -target iosApp \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            SYMROOT="$PWD/build/ios" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      # Runs the app on a simulated iPhone and takes screenshots, so it can be checked without a real device.
+      - name: Run in iPhone Simulator and take screenshots
+        run: |
+          set -euo pipefail
+          APP=build/ios/Debug-iphonesimulator/GitHubStore.app
+          OUT=build/simulator
+          mkdir -p "$OUT"
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          phones = [d for runtime, ds in devices.items() if "iOS" in runtime for d in ds if d["name"].startswith("iPhone")]
+          print(phones[-1]["udid"])
+          ')
+          echo "Using simulator $DEVICE"
+          xcrun simctl boot "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl install "$DEVICE" "$APP"
+          xcrun simctl launch "$DEVICE" zed.rainxch.githubstore
+          sleep 20
+          xcrun simctl io "$DEVICE" screenshot "$OUT/1-launch.png"
+          sleep 20
+          xcrun simctl io "$DEVICE" screenshot "$OUT/2-home.png"
+          xcrun simctl openurl "$DEVICE" "githubstore://repo/rainxchzed/Github-Store"
+          sleep 20
+          xcrun simctl io "$DEVICE" screenshot "$OUT/3-details.png"
+          # Fails the step if the app crashed.
+          xcrun simctl spawn "$DEVICE" launchctl list | grep -q zed.rainxch.githubstore || {
+            echo "::error::GitHub Store is not running on the simulator (crashed?)"
+            xcrun simctl spawn "$DEVICE" log show --last 5m --predicate 'process == "GitHubStore"' > "$OUT/app.log" || true
+            tail -100 "$OUT/app.log" || true
+            exit 1
+          }
+          xcrun simctl spawn "$DEVICE" log show --last 5m --predicate 'process == "GitHubStore"' > "$OUT/app.log" || true
+
+      - name: Upload simulator screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-screenshots
+          path: build/simulator/
+          if-no-files-found: ignore
+
+      # Device build is only needed for installing on a real iPhone; run the workflow manually to get it.
+      - name: Build unsigned iOS app for devices
+        if: github.event_name == 'workflow_dispatch'
         run: |
           set -euo pipefail
           xcodebuild \
@@ -73,6 +131,7 @@ jobs:
 
       # Unsigned: install with Sideloadly / AltStore / SideStore, which sign it with your Apple ID.
       - name: Package unsigned IPA
+        if: github.event_name == 'workflow_dispatch'
         run: |
           set -euo pipefail
           mkdir -p build/ipa/Payload
@@ -81,6 +140,7 @@ jobs:
           zip -qr GitHubStore-unsigned.ipa Payload
 
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch'
         with:
           name: GitHubStore-unsigned-ipa
           path: build/ipa/GitHubStore-unsigned.ipa
