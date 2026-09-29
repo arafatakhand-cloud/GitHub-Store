@@ -18,6 +18,7 @@ import zed.rainxch.core.domain.repository.ThemesRepository
 import zed.rainxch.core.domain.system.InstallerStatusProvider
 import zed.rainxch.core.domain.system.UpdateScheduleManager
 import zed.rainxch.core.domain.utils.BrowserHelper
+import zed.rainxch.core.presentation.utils.toOneDecimalString
 import zed.rainxch.githubstore.core.presentation.res.Res
 import zed.rainxch.githubstore.core.presentation.res.failed_to_save_proxy_settings
 import zed.rainxch.githubstore.core.presentation.res.invalid_proxy_port
@@ -86,7 +87,7 @@ class ProfileViewModel(
         return if (size == size.toLong().toDouble()) {
             "${size.toLong()} ${units[unitIndex]}"
         } else {
-            "${"%.1f".format(size)} ${units[unitIndex]}"
+            "${size.toOneDecimalString()} ${units[unitIndex]}"
         }
     }
 

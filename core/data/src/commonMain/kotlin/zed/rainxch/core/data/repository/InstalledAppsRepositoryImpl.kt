@@ -8,6 +8,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.http.HttpHeaders
+import kotlin.time.Clock
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -148,18 +149,18 @@ class InstalledAppsRepositoryImpl(
                     assetUrl = primaryAsset?.downloadUrl,
                     assetSize = primaryAsset?.size,
                     releaseNotes = latestRelease.description ?: "",
-                    timestamp = System.currentTimeMillis(),
+                    timestamp = Clock.System.now().toEpochMilliseconds(),
                     latestVersionName = latestRelease.tagName,
                     latestVersionCode = null,
                 )
 
                 return isUpdateAvailable
             } else {
-                installedAppsDao.updateLastChecked(packageName, System.currentTimeMillis())
+                installedAppsDao.updateLastChecked(packageName, Clock.System.now().toEpochMilliseconds())
             }
         } catch (e: Exception) {
             Logger.e { "Failed to check updates for $packageName: ${e.message}" }
-            installedAppsDao.updateLastChecked(packageName, System.currentTimeMillis())
+            installedAppsDao.updateLastChecked(packageName, Clock.System.now().toEpochMilliseconds())
         }
 
         return false
@@ -201,7 +202,7 @@ class InstalledAppsRepositoryImpl(
                 repoName = app.repoName,
                 fromVersion = app.installedVersion,
                 toVersion = newTag,
-                updatedAt = System.currentTimeMillis(),
+                updatedAt = Clock.System.now().toEpochMilliseconds(),
                 updateSource = InstallSource.THIS_APP,
                 success = true,
             ),
@@ -220,8 +221,8 @@ class InstalledAppsRepositoryImpl(
                 latestVersionName = newVersionName,
                 latestVersionCode = newVersionCode,
                 isUpdateAvailable = false,
-                lastUpdatedAt = System.currentTimeMillis(),
-                lastCheckedAt = System.currentTimeMillis(),
+                lastUpdatedAt = Clock.System.now().toEpochMilliseconds(),
+                lastCheckedAt = Clock.System.now().toEpochMilliseconds(),
                 signingFingerprint = signingFingerprint,
             ),
         )

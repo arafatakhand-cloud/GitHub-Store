@@ -261,7 +261,7 @@ fun StateDevicePrompt(
             val seconds = authState.remainingSeconds % 60
             val formatted =
                 remember(minutes, seconds) {
-                    "%02d:%02d".format(minutes, seconds)
+                    "${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
                 }
             Text(
                 text = stringResource(Res.string.auth_code_expires_in, formatted),

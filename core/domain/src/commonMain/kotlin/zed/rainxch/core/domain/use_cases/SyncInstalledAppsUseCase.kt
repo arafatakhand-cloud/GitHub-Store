@@ -1,6 +1,8 @@
 package zed.rainxch.core.domain.use_cases
 
+import kotlin.time.Clock
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import zed.rainxch.core.domain.logging.GitHubStoreLogger
@@ -36,7 +38,7 @@ class SyncInstalledAppsUseCase(
             try {
                 val installedPackageNames = packageMonitor.getAllInstalledPackageNames()
                 val appsInDb = installedAppsRepository.getAllInstalledApps().first()
-                val now = System.currentTimeMillis()
+                val now = Clock.System.now().toEpochMilliseconds()
 
                 val toDelete = mutableListOf<String>()
                 val toMigrate = mutableListOf<Pair<String, MigrationResult>>()

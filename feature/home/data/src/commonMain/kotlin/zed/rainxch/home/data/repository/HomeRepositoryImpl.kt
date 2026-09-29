@@ -8,6 +8,7 @@ import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
@@ -375,6 +376,7 @@ class HomeRepositoryImpl(
                 Platform.WINDOWS -> "desktop"
                 Platform.MACOS -> "macos"
                 Platform.LINUX -> "linux"
+                Platform.IOS -> "ios"
             }
 
         return "$baseQuery topic:$topic"
@@ -411,6 +413,13 @@ class HomeRepositoryImpl(
                 if (topics.contains("cross-platform") || topics.contains("multiplatform")) score += 8
                 if (language in setOf("kotlin", "c++", "rust", "c#", "swift", "dart")) score += 5
                 if (desc.contains("desktop") || desc.contains("application")) score += 3
+            }
+
+            Platform.IOS -> {
+                if (topics.contains("ios")) score += 10
+                if (topics.contains("iphone") || topics.contains("ipad") || topics.contains("swiftui")) score += 5
+                if (language == "swift" || language == "objective-c") score += 5
+                if (desc.contains("ios") || desc.contains("ipa")) score += 3
             }
         }
 
@@ -458,6 +467,10 @@ class HomeRepositoryImpl(
                                 name.endsWith(
                                     ".rpm",
                                 )
+                        }
+
+                        Platform.IOS -> {
+                            name.endsWith(".ipa")
                         }
                     }
                 }

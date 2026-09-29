@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-GitHub Store is a cross-platform app store for GitHub releases, built with **Kotlin Multiplatform (KMP)** and **Compose Multiplatform**. Targets **Android** (min API 26) and **Desktop** (Windows, macOS, Linux via JVM).
+GitHub Store is a cross-platform app store for GitHub releases, built with **Kotlin Multiplatform (KMP)** and **Compose Multiplatform**. Targets **Android** (min API 26), **Desktop** (Windows, macOS, Linux via JVM) and **iOS** (iosArm64, iosSimulatorArm64; iOS 15+).
 
 Package: `zed.rainxch.githubstore` | Version: 1.6.2 (code 13) | Target SDK: 36
 
@@ -21,6 +21,10 @@ Package: `zed.rainxch.githubstore` | Version: 1.6.2 (code 13) | Target SDK: 36
 ./gradlew :composeApp:packageDmg :composeApp:packagePkg   # macOS
 ./gradlew :composeApp:packageDeb :composeApp:packageRpm   # Linux
 
+# iOS (macOS + Xcode only): open iosApp/iosApp.xcodeproj and run,
+# or compile the Kotlin side with:
+./gradlew :composeApp:linkDebugFrameworkIosSimulatorArm64
+
 # Full build check
 ./gradlew build
 ```
@@ -34,6 +38,8 @@ composeApp/                          # Main app module (entry points, navigation
   src/commonMain/                    # Shared UI & app wiring
   src/androidMain/                   # Android entry point (MainActivity)
   src/jvmMain/                       # Desktop entry point (DesktopApp.kt)
+  src/iosMain/                       # iOS entry point (MainViewController.kt)
+iosApp/                              # Xcode project wrapping the ComposeApp framework
 core/
   domain/                            # Shared interfaces, models, use cases (no framework deps)
   data/                              # Shared repos, networking (Ktor), database (Room), DI
@@ -166,5 +172,7 @@ Custom Gradle plugins in `build-logic/convention/` standardize module setup:
 - Sealed classes/interfaces for type-safe navigation routes, actions, events
 - Repository pattern: interface in `domain/`, implementation in `data/`
 - Composition over inheritance via Koin DI
-- Source sets: `commonMain` for shared, `androidMain` for Android, `jvmMain` for Desktop
+- Source sets: `commonMain` for shared, `androidMain` for Android, `jvmMain` for Desktop, `iosMain` for iOS
+- `commonMain` must stay free of JVM-only APIs (`java.*`, `System.currentTimeMillis()`, `String.format`, `java.io.File`); use `kotlin.time.Clock`, okio `FileSystem.SYSTEM`, `kotlinx.io.IOException`, and add `import kotlinx.coroutines.IO` when using `Dispatchers.IO`
+- iOS cannot install other apps: `IosInstaller` only handles `.ipa` assets and hands them to the share sheet (AltStore/SideStore/TrollStore)
 - Feature CLAUDE.md files exist in each `feature/` directory for module-specific guidance

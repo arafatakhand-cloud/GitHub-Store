@@ -10,6 +10,7 @@ import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -204,6 +205,10 @@ class StarredRepositoryImpl(
                                 name.endsWith(
                                     ".rpm",
                                 )
+                        }
+
+                        Platform.IOS -> {
+                            name.endsWith(".ipa")
                         }
                     }
                 }

@@ -7,6 +7,7 @@ kotlin {
         commonMain {
             dependencies {
                 implementation(libs.kotlin.stdlib)
+                implementation(libs.okio)
 
                 implementation(projects.core.domain)
                 implementation(projects.core.presentation)

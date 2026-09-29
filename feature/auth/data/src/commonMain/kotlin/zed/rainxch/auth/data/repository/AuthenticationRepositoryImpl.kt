@@ -1,8 +1,10 @@
 package zed.rainxch.auth.data.repository
 
+import kotlin.time.Clock
 import kotlinx.coroutines.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.flow.Flow
@@ -18,7 +20,6 @@ import zed.rainxch.core.domain.logging.GitHubStoreLogger
 import zed.rainxch.core.domain.model.GithubDeviceStart
 import zed.rainxch.core.domain.model.GithubDeviceTokenSuccess
 import zed.rainxch.feature.auth.data.BuildKonfig
-import java.util.concurrent.TimeoutException
 
 class AuthenticationRepositoryImpl(
     private val tokenStore: TokenStore,
@@ -52,7 +53,7 @@ class AuthenticationRepositoryImpl(
         withContext(Dispatchers.IO) {
             val clientId = BuildKonfig.GITHUB_CLIENT_ID
             val timeoutMs = start.expiresInSec * 1000L
-            val startTime = System.currentTimeMillis()
+            val startTime = Clock.System.now().toEpochMilliseconds()
 
             val initialJitter = (0..2000).random().toLong()
             delay(initialJitter)
@@ -65,8 +66,8 @@ class AuthenticationRepositoryImpl(
             logger.debug("⏱️ Polling started. Timeout: ${start.expiresInSec}s, Interval: ${start.intervalSec}s")
 
             while (isActive) {
-                if (System.currentTimeMillis() - startTime >= timeoutMs) {
-                    throw TimeoutException(
+                if (Clock.System.now().toEpochMilliseconds() - startTime >= timeoutMs) {
+                    throw DeviceFlowTimeoutException(
                         "Authentication timed out after ${start.expiresInSec} seconds. Please try again.",
                     )
                 }
@@ -175,7 +176,7 @@ class AuthenticationRepositoryImpl(
                     }
                 } catch (e: CancellationException) {
                     throw e
-                } catch (e: TimeoutException) {
+                } catch (e: DeviceFlowTimeoutException) {
                     throw e
                 } catch (e: Exception) {
                     consecutiveUnknownErrors++
@@ -236,3 +237,7 @@ class AuthenticationRepositoryImpl(
             errorMsg.contains("host unreachable") ||
             errorMsg.contains("network error")
 }
+
+private class DeviceFlowTimeoutException(
+    message: String,
+) : Exception(message)

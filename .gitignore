@@ -37,3 +37,9 @@ google-services.json
 composeApp/release/baselineProfiles/
 
 composeApp/kotzilla.json
+
+# Xcode
+iosApp/**/xcuserdata/
+iosApp/**/*.xcworkspace/xcuserdata/
+*.xcuserstate
+DerivedData/

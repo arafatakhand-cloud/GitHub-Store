@@ -7,6 +7,7 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -76,6 +77,8 @@ class CachedRepositoriesDataSourceImpl(
                     Platform.WINDOWS -> "windows"
                     Platform.MACOS -> "macos"
                     Platform.LINUX -> "linux"
+                    // No pre-built mirror cache exists for iOS yet; fall back to live search.
+                    Platform.IOS -> return@withContext null
                 }
 
             val path =

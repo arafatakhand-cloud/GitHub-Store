@@ -1,7 +1,9 @@
 package zed.rainxch.core.data.local.db
 
+import androidx.room.ConstructedBy
 import androidx.room.Database
 import androidx.room.RoomDatabase
+import androidx.room.RoomDatabaseConstructor
 import zed.rainxch.core.data.local.db.dao.CacheDao
 import zed.rainxch.core.data.local.db.dao.FavoriteRepoDao
 import zed.rainxch.core.data.local.db.dao.InstalledAppDao
@@ -24,10 +26,17 @@ import zed.rainxch.core.data.local.db.entities.UpdateHistoryEntity
     version = 5,
     exportSchema = true,
 )
+@ConstructedBy(AppDatabaseConstructor::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract val installedAppDao: InstalledAppDao
     abstract val favoriteRepoDao: FavoriteRepoDao
     abstract val updateHistoryDao: UpdateHistoryDao
     abstract val starredReposDao: StarredRepoDao
     abstract val cacheDao: CacheDao
+}
+
+// Room's KSP processor generates the `actual` implementations for every target.
+@Suppress("KotlinNoActualForExpect")
+expect object AppDatabaseConstructor : RoomDatabaseConstructor<AppDatabase> {
+    override fun initialize(): AppDatabase
 }

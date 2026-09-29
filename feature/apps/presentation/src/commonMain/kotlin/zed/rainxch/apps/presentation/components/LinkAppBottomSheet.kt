@@ -51,6 +51,7 @@ import zed.rainxch.apps.presentation.AppsState
 import zed.rainxch.apps.presentation.LinkStep
 import zed.rainxch.core.domain.model.DeviceApp
 import zed.rainxch.core.domain.model.GithubAsset
+import zed.rainxch.core.presentation.utils.formatFileSize
 import zed.rainxch.githubstore.core.presentation.res.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -495,11 +496,3 @@ private fun PickAssetStep(
         }
     }
 }
-
-private fun formatFileSize(bytes: Long): String =
-    when {
-        bytes >= 1_073_741_824 -> "%.1f GB".format(bytes / 1_073_741_824.0)
-        bytes >= 1_048_576 -> "%.1f MB".format(bytes / 1_048_576.0)
-        bytes >= 1_024 -> "%.1f KB".format(bytes / 1_024.0)
-        else -> "$bytes B"
-    }

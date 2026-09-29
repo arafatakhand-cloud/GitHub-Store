@@ -76,6 +76,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.skydoves.landscapist.coil3.CoilImage
 import io.github.fletchmckee.liquid.liquefiable
+import kotlin.time.Clock
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
@@ -772,7 +773,7 @@ fun AppItemCard(
 
 @Composable
 private fun formatLastChecked(timestamp: Long): String {
-    val now = System.currentTimeMillis()
+    val now = Clock.System.now().toEpochMilliseconds()
     val diff = now - timestamp
     val minutes = diff / (60 * 1000)
     val hours = diff / (60 * 60 * 1000)

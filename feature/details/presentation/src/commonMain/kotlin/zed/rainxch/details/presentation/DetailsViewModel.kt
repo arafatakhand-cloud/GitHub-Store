@@ -2,6 +2,7 @@ package zed.rainxch.details.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlin.concurrent.Volatile
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
@@ -20,6 +21,13 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.format
 import kotlinx.datetime.format.char
 import kotlinx.datetime.toLocalDateTime
+import okio.FileSystem
+import okio.HashingSink
+import okio.Path.Companion.toPath
+import okio.SYSTEM
+import okio.blackholeSink
+import okio.buffer
+import okio.use
 import org.jetbrains.compose.resources.getString
 import zed.rainxch.core.domain.logging.GitHubStoreLogger
 import zed.rainxch.core.domain.model.ApkPackageInfo
@@ -61,10 +69,6 @@ import zed.rainxch.githubstore.core.presentation.res.link_copied_to_clipboard
 import zed.rainxch.githubstore.core.presentation.res.rate_limit_exceeded
 import zed.rainxch.githubstore.core.presentation.res.removed_from_favourites
 import zed.rainxch.githubstore.core.presentation.res.translation_failed
-import java.io.File
-import java.io.FileInputStream
-import java.security.MessageDigest
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock.System
 import kotlin.time.ExperimentalTime
@@ -114,7 +118,8 @@ class DetailsViewModel(
     private val _events = Channel<DetailsEvent>()
     val events = _events.receiveAsFlow()
 
-    private val rateLimited = AtomicBoolean(false)
+    @Volatile
+    private var rateLimited = false
 
     private fun recomputeAssetsForRelease(release: GithubRelease?): Pair<List<GithubAsset>, GithubAsset?> {
         val installable =
@@ -131,7 +136,7 @@ class DetailsViewModel(
     private fun loadInitial() {
         viewModelScope.launch {
             try {
-                rateLimited.set(false)
+                rateLimited = false
 
                 _state.value = _state.value.copy(isLoading = true, errorMessage = null)
 
@@ -151,7 +156,7 @@ class DetailsViewModel(
                         try {
                             favouritesRepository.isFavoriteSync(repo.id)
                         } catch (_: RateLimitException) {
-                            rateLimited.set(true)
+                            rateLimited = true
                             null
                         } catch (t: Throwable) {
                             logger.error("Failed to load if repo is favourite: ${t.localizedMessage}")
@@ -164,7 +169,7 @@ class DetailsViewModel(
                         try {
                             starredRepository.isStarred(repo.id)
                         } catch (_: RateLimitException) {
-                            rateLimited.set(true)
+                            rateLimited = true
                             null
                         } catch (t: Throwable) {
                             logger.error("Failed to load if repo is starred: ${t.localizedMessage}")
@@ -192,7 +197,7 @@ class DetailsViewModel(
                                 defaultBranch = repo.defaultBranch,
                             )
                         } catch (_: RateLimitException) {
-                            rateLimited.set(true)
+                            rateLimited = true
                             emptyList()
                         } catch (t: Throwable) {
                             logger.warn("Failed to load releases: ${t.message}")
@@ -205,7 +210,7 @@ class DetailsViewModel(
                         try {
                             detailsRepository.getRepoStats(owner, name)
                         } catch (_: RateLimitException) {
-                            rateLimited.set(true)
+                            rateLimited = true
                             null
                         } catch (_: Throwable) {
                             null
@@ -221,7 +226,7 @@ class DetailsViewModel(
                                 defaultBranch = repo.defaultBranch,
                             )
                         } catch (_: RateLimitException) {
-                            rateLimited.set(true)
+                            rateLimited = true
                             null
                         } catch (_: Throwable) {
                             null
@@ -233,7 +238,7 @@ class DetailsViewModel(
                         try {
                             detailsRepository.getUserProfile(owner)
                         } catch (_: RateLimitException) {
-                            rateLimited.set(true)
+                            rateLimited = true
                             null
                         } catch (t: Throwable) {
                             logger.warn("Failed to load user profile: ${t.message}")
@@ -262,7 +267,7 @@ class DetailsViewModel(
                                 null
                             }
                         } catch (_: RateLimitException) {
-                            rateLimited.set(true)
+                            rateLimited = true
                             null
                         } catch (t: Throwable) {
                             logger.error("Failed to load installed app: ${t.message}")
@@ -279,7 +284,7 @@ class DetailsViewModel(
                 val userProfile = userProfileDeferred.await()
                 val installedApp = installedAppDeferred.await()
 
-                if (rateLimited.get()) {
+                if (rateLimited) {
                     _state.value = _state.value.copy(isLoading = false, errorMessage = null)
                     return@launch
                 }
@@ -1231,17 +1236,13 @@ class DetailsViewModel(
         }
     }
 
-    private fun computeSha256(filePath: String): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        val buffer = ByteArray(8192)
-        FileInputStream(File(filePath)).use { fis ->
-            var bytesRead: Int
-            while (fis.read(buffer).also { bytesRead = it } != -1) {
-                digest.update(buffer, 0, bytesRead)
+    private fun computeSha256(filePath: String): String =
+        HashingSink.sha256(blackholeSink()).use { hashingSink ->
+            FileSystem.SYSTEM.source(filePath.toPath()).buffer().use { source ->
+                source.readAll(hashingSink)
             }
+            hashingSink.hash.hex()
         }
-        return digest.digest().joinToString("") { "%02x".format(it) }
-    }
 
     private suspend fun downloadAsset(
         assetName: String,
@@ -1274,8 +1275,9 @@ class DetailsViewModel(
         val existingPath = downloader.getDownloadedFilePath(assetName)
         val filePath: String
 
-        val existingFile = existingPath?.let { File(it) }
-        if (existingFile != null && existingFile.exists() && existingFile.length() == sizeBytes) {
+        val existingFileSize =
+            existingPath?.let { FileSystem.SYSTEM.metadataOrNull(it.toPath())?.size }
+        if (existingPath != null && existingFileSize == sizeBytes) {
             logger.debug("Reusing already downloaded file: $assetName")
             filePath = existingPath
             _state.value =

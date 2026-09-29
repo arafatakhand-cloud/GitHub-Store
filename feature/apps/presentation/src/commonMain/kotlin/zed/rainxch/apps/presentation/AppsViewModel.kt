@@ -2,6 +2,7 @@ package zed.rainxch.apps.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlin.time.Clock
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -14,6 +15,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import okio.FileSystem
+import okio.Path.Companion.toPath
+import okio.SYSTEM
 import org.jetbrains.compose.resources.getString
 import zed.rainxch.apps.domain.repository.AppsRepository
 import zed.rainxch.apps.presentation.model.AppItem
@@ -30,7 +34,6 @@ import zed.rainxch.core.domain.system.Installer
 import zed.rainxch.core.domain.use_cases.SyncInstalledAppsUseCase
 import zed.rainxch.core.domain.utils.ShareManager
 import zed.rainxch.githubstore.core.presentation.res.*
-import java.io.File
 
 class AppsViewModel(
     private val appsRepository: AppsRepository,
@@ -118,7 +121,7 @@ class AppsViewModel(
     }
 
     private fun autoCheckForUpdatesIfNeeded() {
-        val now = System.currentTimeMillis()
+        val now = Clock.System.now().toEpochMilliseconds()
         if (now - lastAutoCheckTimestamp < UPDATE_CHECK_COOLDOWN_MS) {
             logger.debug("Skipping auto-check: last check was ${(now - lastAutoCheckTimestamp) / 1000}s ago")
             return
@@ -132,7 +135,7 @@ class AppsViewModel(
             try {
                 syncInstalledAppsUseCase()
                 installedAppsRepository.checkAllForUpdates()
-                val now = System.currentTimeMillis()
+                val now = Clock.System.now().toEpochMilliseconds()
                 lastAutoCheckTimestamp = now
                 _state.update { it.copy(lastCheckedTimestamp = now) }
             } catch (e: Exception) {
@@ -149,7 +152,7 @@ class AppsViewModel(
             try {
                 syncInstalledAppsUseCase()
                 installedAppsRepository.checkAllForUpdates()
-                val now = System.currentTimeMillis()
+                val now = Clock.System.now().toEpochMilliseconds()
                 lastAutoCheckTimestamp = now
                 _state.update { it.copy(lastCheckedTimestamp = now) }
             } catch (e: Exception) {
@@ -422,7 +425,7 @@ class AppsViewModel(
 
                     val existingPath = downloader.getDownloadedFilePath(latestAssetName)
                     if (existingPath != null) {
-                        val file = File(existingPath)
+                        val file = existingPath.toPath()
                         try {
                             val apkInfo =
                                 installer.getApkInfoExtractor().extractPackageInfo(existingPath)
@@ -431,12 +434,12 @@ class AppsViewModel(
                             val normalizedLatest =
                                 latestVersion.removePrefix("v").removePrefix("V")
                             if (normalizedExisting != normalizedLatest) {
-                                val deleted = file.delete()
+                                val deleted = runCatching { FileSystem.SYSTEM.delete(file) }.isSuccess
                                 logger.debug("Deleted mismatched existing file ($normalizedExisting != $normalizedLatest): $deleted")
                             }
                         } catch (e: Exception) {
                             logger.debug("Failed to extract APK info for existing file: ${e.message}")
-                            val deleted = file.delete()
+                            val deleted = runCatching { FileSystem.SYSTEM.delete(file) }.isSuccess
                             logger.debug("Deleted unextractable existing file: $deleted")
                         }
                     }
@@ -994,7 +997,7 @@ class AppsViewModel(
                 }
             } finally {
                 try {
-                    if (filePath != null) File(filePath).delete()
+                    if (filePath != null) FileSystem.SYSTEM.delete(filePath.toPath())
                 } catch (_: Exception) {
                 }
             }
@@ -1030,7 +1033,7 @@ class AppsViewModel(
             _state.update { it.copy(isExporting = true) }
             try {
                 val json = appsRepository.exportApps()
-                val fileName = "github-store-apps-${System.currentTimeMillis()}.json"
+                val fileName = "github-store-apps-${Clock.System.now().toEpochMilliseconds()}.json"
                 shareManager.shareFile(fileName, json)
                 _events.send(AppsEvent.ExportReady(json))
             } catch (e: Exception) {

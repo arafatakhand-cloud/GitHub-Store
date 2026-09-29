@@ -53,6 +53,7 @@ import androidx.compose.ui.window.DialogProperties
 import org.jetbrains.compose.resources.stringResource
 import zed.rainxch.core.domain.model.GithubAsset
 import zed.rainxch.core.domain.model.GithubUser
+import zed.rainxch.core.presentation.utils.formatFileSize
 import zed.rainxch.details.presentation.DetailsAction
 import zed.rainxch.githubstore.core.presentation.res.*
 import zed.rainxch.githubstore.core.presentation.res.Res
@@ -287,14 +288,6 @@ private fun ReleaseAssetItem(
         }
     }
 }
-
-private fun formatFileSize(bytes: Long): String =
-    when {
-        bytes >= 1_073_741_824 -> "%.1f GB".format(bytes / 1_073_741_824.0)
-        bytes >= 1_048_576 -> "%.1f MB".format(bytes / 1_048_576.0)
-        bytes >= 1_024 -> "%.1f KB".format(bytes / 1_024.0)
-        else -> "$bytes B"
-    }
 
 @Preview
 @Composable

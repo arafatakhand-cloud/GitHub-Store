@@ -82,6 +82,10 @@ class DesktopInstaller(
                 Platform.LINUX -> {
                     name.endsWith(".appimage") || name.endsWith(".deb") || name.endsWith(".rpm")
                 }
+
+                Platform.IOS -> {
+                    false
+                }
             }
 
         if (!hasValidExtension) return false
@@ -112,6 +116,10 @@ class DesktopInstaller(
                         LinuxPackageType.RPM -> listOf(".appimage", ".rpm", ".deb")
                         LinuxPackageType.UNIVERSAL -> listOf(".appimage", ".deb", ".rpm")
                     }
+                }
+
+                Platform.IOS -> {
+                    emptyList()
                 }
             }
 

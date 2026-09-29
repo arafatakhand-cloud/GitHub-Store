@@ -11,6 +11,7 @@ import io.ktor.serialization.kotlinx.json.*
 import io.ktor.util.network.UnresolvedAddressException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.io.IOException
 import kotlinx.serialization.json.Json
 import zed.rainxch.core.data.data_source.TokenStore
 import zed.rainxch.core.data.network.interceptor.RateLimitInterceptor
@@ -19,7 +20,6 @@ import zed.rainxch.core.domain.model.ProxyConfig
 import zed.rainxch.core.domain.model.RateLimitException
 import zed.rainxch.core.domain.repository.AuthenticationState
 import zed.rainxch.core.domain.repository.RateLimitRepository
-import java.io.IOException
 import kotlin.coroutines.cancellation.CancellationException
 
 expect fun createPlatformHttpClient(proxyConfig: ProxyConfig): HttpClient
